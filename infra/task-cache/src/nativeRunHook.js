@@ -41,7 +41,7 @@ export async function startRunHook(command, cwd = process.cwd(), resolveWorkspac
         return Object.assign(
           async () => {
             try {
-              await finish?.();
+              if (typeof finish === "function") await finish();
             } catch {
               console.warn("[Vite+] Run hook failed to finish.");
             }

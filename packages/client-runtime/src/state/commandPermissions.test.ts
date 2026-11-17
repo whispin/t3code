@@ -175,7 +175,7 @@ describe("command permissions", () => {
     }),
   );
 
-  it.effect.each([WS_METHODS.serverCheckOtlpEndpoint, WS_METHODS.serverCheckSecretSource])(
+  it.effect.each([WS_METHODS.serverCheckSecretSource])(
     "requires the destination settings grant for %s",
     (method) =>
       Effect.gen(function* () {

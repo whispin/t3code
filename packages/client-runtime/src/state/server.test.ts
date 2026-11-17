@@ -501,9 +501,6 @@ describe("server state projection", () => {
         const observability = {
           logsDirectoryPath: "/synthetic/logs",
           localTracingEnabled: false,
-          otlpTracesEnabled: false,
-          otlpMetricsEnabled: false,
-          otlpLogsEnabled: false,
         };
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -517,7 +514,6 @@ describe("server state projection", () => {
             ) as typeof observability;
             for (const next of [
               { ...CONFIG, observability: reordered },
-              { ...CONFIG, observability: { ...reordered, otlpTracesUrl: undefined } },
               { ...CONFIG, observability: { ...observability } },
             ]) {
               const encode = Schema.encodeEffect(Schema.fromJsonString(ServerObservability));
@@ -533,7 +529,7 @@ describe("server state projection", () => {
             const changed = yield* h.send(
               snapshotEvent({
                 ...CONFIG,
-                observability: { ...observability, otlpTracesUrl: "https://traces.example.test" },
+                observability: { ...observability, logsDirectoryPath: "/changed/logs" },
               }),
             );
             yield* TestClock.adjust("10 seconds");

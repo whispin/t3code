@@ -1,9 +1,9 @@
 import { generateKeyPair, SignJWT } from "jose";
 import { expect, it, vi } from "vite-plus/test";
-import { authorizeCacheWrite, authorizeTelemetry } from "./telemetryAuth.ts";
+import { authorizeCacheWrite } from "./telemetryAuth.ts";
 import { authorize, ISSUER } from "../vendor/vite-plus-remote-cache-cloudflare/src/auth.ts";
 
-it("accepts signed stacked PR telemetry without granting cache writes or trusting another repository", async () => {
+it("verifies cache write policy without trusting another repository", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(1_000_000);
   try {
@@ -60,7 +60,6 @@ it("accepts signed stacked PR telemetry without granting cache writes or trustin
         keys,
       ),
     ).rejects.toMatchObject({ status: 403 });
-    expect(await authorizeTelemetry(valid, scope, keys)).toBe("github/maria");
     await expect(
       authorizeCacheWrite(valid, { ...allowed, pull_requests: 0 }, keys),
     ).rejects.toMatchObject({ status: 403 });
@@ -74,9 +73,6 @@ it("accepts signed stacked PR telemetry without granting cache writes or trustin
     });
     await expect(
       authorizeCacheWrite(request(await token("another-repo")), allowed, keys),
-    ).rejects.toMatchObject({ status: 403 });
-    await expect(
-      authorizeTelemetry(request(await token("another-repo")), scope, keys),
     ).rejects.toMatchObject({ status: 403 });
   } finally {
     vi.useRealTimers();

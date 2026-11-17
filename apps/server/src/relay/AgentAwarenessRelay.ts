@@ -21,7 +21,6 @@ import {
 } from "@t3tools/shared/agentAwareness";
 import { turnItemUpdateCanEndBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
-import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import { normalizeRelayIssuer, RELAY_ACTIVITY_PUBLISH_TYP } from "@t3tools/shared/relayJwt";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -673,7 +672,7 @@ export const make = Effect.gen(function* () {
           projectId: unsettled.projectId,
           state: completion,
           reason: unsettled.reason,
-        }).pipe(withRelayClientTracing);
+        });
         heldCompletions.delete(threadId);
         publishConfirmDeadlines.set(threadId, nowMs + 5_000);
         yield* Ref.update(publishedStateByThreadRef, (publishedStates) =>
@@ -712,7 +711,7 @@ export const make = Effect.gen(function* () {
       projectId: snapshot.projectId,
       state,
       reason: snapshot.reason,
-    }).pipe(withRelayClientTracing);
+    });
     if (state !== null && childRequestId !== undefined) {
       childAlertByThread.set(threadId, { requestId: childRequestId, updatedAt: state.updatedAt });
     }

@@ -353,42 +353,11 @@ export const isProviderAvailable = (snapshot: ServerProvider): boolean =>
 export const isProviderTextGenerationCapable = (snapshot: ServerProvider): boolean =>
   snapshot.supportsTextGeneration !== false;
 
-export const OtlpEndpointSource = Schema.Literals(["environment", "bootstrap", "settings"]);
-export type OtlpEndpointSource = typeof OtlpEndpointSource.Type;
-
 export const ServerObservability = Schema.Struct({
   logsDirectoryPath: TrimmedNonEmptyString,
   localTracingEnabled: Schema.Boolean,
-  otlpTracesUrl: Schema.optional(TrimmedNonEmptyString),
-  otlpTracesSource: Schema.optional(OtlpEndpointSource),
-  otlpTracesVariable: Schema.optional(TrimmedNonEmptyString),
-  otlpTracesEnabled: Schema.Boolean,
-  otlpMetricsUrl: Schema.optional(TrimmedNonEmptyString),
-  otlpMetricsSource: Schema.optional(OtlpEndpointSource),
-  otlpMetricsVariable: Schema.optional(TrimmedNonEmptyString),
-  otlpMetricsEnabled: Schema.Boolean,
-  otlpLogsUrl: Schema.optional(TrimmedNonEmptyString),
-  otlpLogsSource: Schema.optional(OtlpEndpointSource),
-  otlpLogsVariable: Schema.optional(TrimmedNonEmptyString),
-  otlpLogsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type ServerObservability = typeof ServerObservability.Type;
-
-export const OtlpSignal = Schema.Literals(["traces", "metrics", "logs"]);
-export type OtlpSignal = typeof OtlpSignal.Type;
-
-export const OtlpEndpointCheckInput = Schema.Struct({
-  signal: OtlpSignal,
-  url: TrimmedNonEmptyString.check(Schema.isPattern(/^https?:\/\/./i)),
-});
-export type OtlpEndpointCheckInput = typeof OtlpEndpointCheckInput.Type;
-
-export const OtlpEndpointCheckResult = Schema.Union([
-  Schema.TaggedStruct("Accepted", { latencyMs: Schema.Number }),
-  Schema.TaggedStruct("Rejected", { status: Schema.Number }),
-  Schema.TaggedStruct("Unreachable", { timedOut: Schema.Boolean }),
-]);
-export type OtlpEndpointCheckResult = typeof OtlpEndpointCheckResult.Type;
 
 /** The client tells the server what it is, so the triage context can name it. */
 export const ServerPrepareTriageInput = Schema.Struct({

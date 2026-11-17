@@ -275,6 +275,18 @@ DMGs default to the host architecture. Use `--arch` to choose another target and
 to retain packaging files for inspection. Run `vp run dist:desktop:artifact --help` for other
 options.
 
+### GitHub Actions builds
+
+Open **Actions → Desktop Build → Run workflow** on your fork and select Windows, Linux,
+macOS ARM64, macOS x64, or all platforms. The workflow uses standard GitHub-hosted runners
+and requires no signing, publishing, or upstream service secrets. Download the installers
+from the completed run’s **Artifacts** section; they are kept for 14 days.
+
+Windows builds include a Linux CLI runtime for the WSL backend. Installers are unsigned,
+so Windows SmartScreen or macOS Gatekeeper may require manual approval. The workflow does
+not publish a GitHub Release or updater feed. Public T3 Connect settings come from
+`.env.example`; edit that file before building to use your own deployment or disable it.
+
 ### Prepared server bytecode
 
 Native macOS and Windows desktop artifact builds, and native Linux x64 and ARM64 builds, generate server
