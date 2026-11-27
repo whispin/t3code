@@ -34,9 +34,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
@@ -68,12 +66,9 @@ import {
 } from "./NetworkTransferMeasurement.integration.ts";
 import { makeSqlStatementCounter } from "./SqlStatementCounter.integration.ts";
 import {
-  formatTransferBudgetReport,
-  formatTransferBudgetResult,
-  formatTransferBudgetScenarios,
   transferBudgetViolations,
   type TransferBudgetRun,
-} from "./TransferBudgetReport.integration.ts";
+} from "./TransferBudgetAssertions.integration.ts";
 import { TRANSFER_HISTORY_TURN_COUNT } from "./fixtures/transferBudget.ts";
 import {
   FLEET_PROJECT_IDENTITY,
@@ -313,7 +308,7 @@ const synchronized = (queue: Queue.Queue<StreamItem>) =>
     ),
   );
 
-it.live("reports V2 thread HTTP and WebSocket transfer budgets", () =>
+it.live("keeps V2 thread HTTP and WebSocket transfers within budgets", () =>
   Effect.gen(function* () {
     const runs: TransferBudgetRun[] = [];
     for (const provider of [
@@ -640,22 +635,6 @@ it.live("reports V2 thread HTTP and WebSocket transfer budgets", () =>
       );
       runs.push(run);
     }
-    const fs = yield* FileSystem.FileSystem;
-    const report = formatTransferBudgetReport(runs);
-    const outputPaths = yield* Config.all({
-      report: Config.String("T3CODE_TRANSFER_BUDGET_REPORT_PATH").pipe(Config.withDefault("")),
-      result: Config.String("T3CODE_TRANSFER_BUDGET_RESULT_PATH").pipe(Config.withDefault("")),
-      scenarios: Config.String("T3CODE_TRANSFER_BUDGET_SCENARIOS_PATH").pipe(
-        Config.withDefault(""),
-      ),
-    });
-    for (const [path, contents] of [
-      [outputPaths.report, report],
-      [outputPaths.result, formatTransferBudgetResult(runs)],
-      [outputPaths.scenarios, formatTransferBudgetScenarios(runs)],
-    ])
-      if (path && contents) yield* fs.writeFileString(path, contents);
-    yield* Effect.log(report);
     assert.deepEqual(transferBudgetViolations(runs), []);
   }).pipe(Effect.provide(NodeServices.layer)),
 );

@@ -318,7 +318,7 @@ const resolveStartupBrowserTarget = Effect.gen(function* () {
     : yield* serverAuth.issueStartupPairingUrl(baseTarget);
 });
 
-/** Prints the one-time admin pairing URL to stdout only; logger records reach trace files and collectors. */
+/** Prints the one-time admin pairing URL to stdout only; logger records stay in local trace files. */
 export const announceStartupPairingUrl = (pairingUrl: string) =>
   Effect.logInfo("Authentication required. Open T3 Code using the pairing URL.").pipe(
     Effect.andThen(Console.log(`  pairingUrl: ${pairingUrl}`)),

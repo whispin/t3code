@@ -500,10 +500,6 @@ jobs:
 
       - name: Test
         if: steps.changes.outputs.test_server != 'false'
-        env:
-          T3CODE_TRANSFER_BUDGET_REPORT_PATH: ${{ runner.temp }}/t3code-transfer-budget.md
-          T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
-          T3CODE_TRANSFER_BUDGET_SCENARIOS_PATH: ${{ runner.temp }}/thread-transfer-scenarios.json
         # One process per file spends ~2s starting before its tests run; one file per vCPU overlaps that.
         run: >-
           vp run test:cached -- --shard ${{ matrix.shard }}/${{ strategy.job-total }} --concurrency 4
@@ -516,40 +512,6 @@ jobs:
         with:
           path: node_modules/.vitest-cache
           key: vitest-modules-server-${{ matrix.shard }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-
-      # integration/transferBudgetV2.integration.test.ts writes the report; exactly one shard
-      # produces these files. Gating the upload on their presence keeps a
-      # single `thread-transfer-results` artifact per run, which is the name
-      # thread-transfer-report.yml resolves.
-      - name: Detect transfer budget report
-        id: transfer_budget
-        if: always()
-        run: |
-          if test -f "${{ runner.temp }}/thread-transfer-result.json"; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Publish transfer budget report
-        if: always() && steps.transfer_budget.outputs.present == 'true'
-        run: |
-          if test -f "${{ runner.temp }}/t3code-transfer-budget.md"; then
-            tee -a "$GITHUB_STEP_SUMMARY" < "${{ runner.temp }}/t3code-transfer-budget.md"
-          else
-            echo "Transfer budget report was not produced." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload thread transfer result
-        if: always() && steps.transfer_budget.outputs.present == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: thread-transfer-results
-          path: |
-            ${{ runner.temp }}/thread-transfer-result.json
-            ${{ runner.temp }}/thread-transfer-scenarios.json
-          if-no-files-found: ignore
-          retention-days: 30
 
   # Split out of Check and Test: both paid ~7-9s to install a Rust toolchain
   # for checks that take under 3s, on the critical path of every PR.
@@ -681,12 +643,3 @@ jobs:
                 .value.result == "success"
                 or (.value.result == "skipped"
                   and (($renamed[.key] // [.key]) | all(.[]; $gates[.] == "false"))))' > /dev/null
-
-      # thread-transfer-report.yml reads this artifact after CI, so a run whose
-      # server tests ran must have produced it.
-      - name: Require transfer measurements
-        if: needs.test_server.result == 'success' && needs.changes.outputs.test_server != 'false'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: thread-transfer-results
-          path: ${{ runner.temp }}/thread-transfer

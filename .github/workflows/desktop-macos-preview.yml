@@ -88,11 +88,10 @@ jobs:
         if: steps.bundle_build.outputs.script == 'build:desktop'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
-      # desktop-macos-preview-publish.yml packages this bundle as the preview
-      # channel. The Linux browser secret helper is not part of a macOS app.
+      # desktop-macos-preview-publish.yml packages this bundle as the preview channel.
       - name: Build JS bundle
         env:
-          T3CODE_TELEMETRY_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && 'preview' || 'dev' }}
+          T3CODE_RELEASE_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && 'preview' || 'dev' }}
         run: vp run ${{ steps.bundle_build.outputs.script }}
 
       # Same layout as release.yml's js-bundle so release-desktop.yml can

@@ -553,11 +553,10 @@ jobs:
       # and apps/desktop/dist-electron the Electron main. build:desktop:bundle
       # skips the Linux browser secret helper, which this artifact does not
       # carry; each Linux package job compiles its own per arch.
-      # The release channel is already stable, nightly, or preview. Builds in
-      # other repositories report "dev" telemetry.
+      # The release channel also prevents source-only policy overrides in packaged builds.
       - name: Build JS bundle
         env:
-          T3CODE_TELEMETRY_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && needs.preflight.outputs.release_channel || 'dev' }}
+          T3CODE_RELEASE_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && needs.preflight.outputs.release_channel || 'dev' }}
         run: vp run ${{ steps.bundle_build.outputs.script }}
 
       # Two paths under apps/ so the artifact root is apps/; consumers download

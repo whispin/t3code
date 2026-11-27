@@ -3,9 +3,10 @@
 This build does not send product usage events, hashed account or device identifiers, relay connection
 traces, mobile crash reports, or build-task statistics to T3 Code, PostHog, or Axiom.
 
-Server and desktop logs, browser traces, and process/resource monitoring remain local to the
-environment and its authorized clients. Automatic OpenTelemetry export and its settings are removed.
-The mobile Diagnostics screen still lets you inspect and copy startup crash reports yourself.
+Server and desktop logs, along with process/resource monitoring, remain local to the environment and
+its authorized clients. Browser spans are no longer sent to the server, and automatic OpenTelemetry
+export is unavailable. The mobile Diagnostics screen still lets you inspect and copy startup crash
+reports yourself.
 Read copied reports before sharing: error messages and stack traces may contain sensitive values.
 
 ## Agent activity for mobile notifications

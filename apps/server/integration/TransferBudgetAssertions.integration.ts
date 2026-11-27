@@ -4,21 +4,6 @@ import type {
   HttpTransferMeasurement,
   WebSocketTransferTotals,
 } from "./NetworkTransferMeasurement.integration.ts";
-import {
-  TRANSFER_HISTORY_MCP_RESULT_BYTES,
-  TRANSFER_HISTORY_TOOLS_PER_TURN,
-  TRANSFER_HISTORY_TURN_COUNT,
-  TRANSFER_MEASURED_MCP_RESULT_BYTES,
-  TRANSFER_MEASURED_TOOLS,
-} from "./fixtures/transferBudget.ts";
-import {
-  LONG_TURN_WORK_ROWS,
-  SHELL_IDLE_SUBAGENTS,
-  SHELL_SETTLED_THREADS,
-  STALE_TODO_LIVE_ROWS,
-  STALE_TODO_SETTLED_RUNS,
-  STALE_TODO_SUBAGENTS_PER_RUN,
-} from "./TransferBudgetV2Fixture.integration.ts";
 
 export interface WebSocketCatchUpMeasurement extends WebSocketTransferTotals {
   readonly mode: "replay" | "snapshot";
@@ -113,7 +98,7 @@ const TRANSFER_BUDGETS: Readonly<Record<string, ProviderTransferBudget>> = {
 
 // Decoded bytes, not wire bytes: phones parse and keep the decoded JSON. About 15% above the
 // observed 95 KB history page, so a page without the ID table (130 KB) or row budgets fails.
-// Kept apart from TRANSFER_BUDGET because the PR comment validates its keys.
+// Kept apart from TRANSFER_BUDGET because the scenario checks use their own ceilings.
 const LONG_TURN_PAGE_BUDGET = {
   decodedBytes: 110_000,
   rows: 75,
@@ -182,94 +167,6 @@ function totalWireBytes(run: TransferBudgetRun): number {
   return run.threadSnapshot.wireBytes + run.measuredTurnWebSocket.wireBytes;
 }
 
-function serverEgressWireBytes(run: TransferBudgetRun): number {
-  return (
-    run.measuredTurnWebSocket.wireBytes +
-    run.measuredTurnShellWebSocket.wireBytes +
-    run.measuredTurnSecondClientWebSocket.wireBytes
-  );
-}
-
-function observedTransfer(run: TransferBudgetRun) {
-  return {
-    totalWireBytes: totalWireBytes(run),
-    threadSnapshotWireBytes: run.threadSnapshot.wireBytes,
-    threadSnapshotDecodedBytes: run.threadSnapshot.decodedBodyBytes,
-    measuredTurnWebSocketWireBytes: run.measuredTurnWebSocket.wireBytes,
-    measuredTurnWebSocketDecodedBytes: run.measuredTurnWebSocket.decodedBytes,
-    measuredTurnWebSocketMessages: run.measuredTurnWebSocket.messages,
-  };
-}
-
-export function formatTransferBudgetResult(runs: ReadonlyArray<TransferBudgetRun>): string {
-  const providers = Object.fromEntries(
-    runs.flatMap((run) => {
-      const ceiling = TRANSFER_BUDGETS[run.provider];
-      return ceiling ? [[run.provider, { observed: observedTransfer(run), ceiling }]] : [];
-    }),
-  );
-
-  return `${JSON.stringify(
-    {
-      schemaVersion: 1,
-      scenario: {
-        id: "thread-transfer-v2",
-        historyTurns: TRANSFER_HISTORY_TURN_COUNT,
-        historyCommandToolsPerTurn: TRANSFER_HISTORY_TOOLS_PER_TURN,
-        historyMcpResultBytes: TRANSFER_HISTORY_MCP_RESULT_BYTES,
-        measuredCommandTools: TRANSFER_MEASURED_TOOLS,
-        measuredMcpResultBytes: TRANSFER_MEASURED_MCP_RESULT_BYTES,
-      },
-      providers,
-    },
-    null,
-    2,
-  )}\n`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1_024) return `${bytes} B`;
-  if (bytes >= 1_024 * 1_024) {
-    return `${(bytes / 1_024 / 1_024).toFixed(2)} MiB (${bytes.toLocaleString("en-US")} B)`;
-  }
-  return `${(bytes / 1_024).toFixed(1)} KiB (${bytes.toLocaleString("en-US")} B)`;
-}
-
-function row(
-  provider: ProviderDriverKind,
-  phase: string,
-  metric: string,
-  observed: number,
-  maximum: number,
-  format: (value: number) => string = formatBytes,
-): string {
-  const status = observed <= maximum ? "PASS" : "FAIL";
-  return `| ${provider} | ${phase} | ${metric} | ${format(observed)} | ${format(maximum)} | ${status} |`;
-}
-
-// The 50 ms shell batching makes transfer, reconnect and SQL figures timing-dependent.
-function infoRow(
-  provider: ProviderDriverKind,
-  phase: string,
-  metric: string,
-  observed: number,
-  format: (value: number) => string = formatBytes,
-): string {
-  return `| ${provider} | ${phase} | ${metric} | ${format(observed)} | none | INFO |`;
-}
-
-function webSocketRows(
-  provider: ProviderDriverKind,
-  phase: string,
-  totals: WebSocketTransferTotals,
-): string[] {
-  return [
-    infoRow(provider, phase, "WebSocket wire", totals.wireBytes),
-    infoRow(provider, phase, "WebSocket decoded", totals.decodedBytes),
-    infoRow(provider, phase, "WebSocket messages", totals.messages, String),
-  ];
-}
-
 interface ScenarioRow {
   readonly phase: string;
   readonly metric: string;
@@ -333,11 +230,6 @@ function socketRows(
   ];
 }
 
-/**
- * Every scenario figure beyond the thread totals. The violations, the report table and the PR
- * comment's scenario file all read this list, so a row added here reaches all three. The PR
- * comment only accepts letters, digits, spaces, commas and hyphens in `phase` and `metric`.
- */
 function scenarioRows(run: TransferBudgetRun): ScenarioRow[] {
   return [
     ...socketRows("short turn resume", run.shortTurnResume, SOCKET_BUDGETS.shortTurnResume),
@@ -392,19 +284,6 @@ function scenarioRows(run: TransferBudgetRun): ScenarioRow[] {
   ];
 }
 
-/** The budgeted scenario figures, for the PR comment to compare with `main`. */
-export function formatTransferBudgetScenarios(runs: ReadonlyArray<TransferBudgetRun>): string {
-  const providers = Object.fromEntries(
-    runs.map((run) => [
-      run.provider,
-      scenarioRows(run).flatMap(({ maximum, ...row }) =>
-        maximum === undefined ? [] : [{ ...row, ceiling: maximum }],
-      ),
-    ]),
-  );
-  return `${JSON.stringify({ schemaVersion: 1, providers }, null, 2)}\n`;
-}
-
 export function transferBudgetViolations(runs: ReadonlyArray<TransferBudgetRun>): string[] {
   const violations: string[] = [];
   for (const run of runs) {
@@ -442,112 +321,4 @@ export function transferBudgetViolations(runs: ReadonlyArray<TransferBudgetRun>)
     }
   }
   return violations;
-}
-
-export function formatTransferBudgetReport(runs: ReadonlyArray<TransferBudgetRun>): string {
-  const lines = [
-    "# T3 Code thread transfer budget",
-    "",
-    "Wire values are thread data bytes read from local HTTP and WebSocket sockets. HTTP includes response headers; WebSocket measurement starts after the resumed thread subscription synchronizes. TCP/IP, TLS framing, and the WebSocket upgrade are excluded. WebSocket permessage-deflate is negotiated.",
-    "The measured turn is observed on three sockets at once: one with only the thread subscription (the capped rows), one with only the shell subscription, and a second client holding both. Server egress is the sum of the three. After the turn the second client disconnects and new sockets resubscribe from the cursor it held before the turn, which is the cursor a backgrounded phone would hold. SQL statements are the SQL client's per-statement spans, counted across V2 persistence and the HTTP/WebSocket handlers.",
-    `Scenario: ${TRANSFER_HISTORY_TURN_COUNT} historical turns with ${TRANSFER_HISTORY_TOOLS_PER_TURN} command tools and one retained ${formatBytes(TRANSFER_HISTORY_MCP_RESULT_BYTES)} MCP result each, followed by one measured turn with ${TRANSFER_MEASURED_TOOLS} command tools and a retained ${formatBytes(TRANSFER_MEASURED_MCP_RESULT_BYTES)} MCP result. Synthetic V2 domain events exercise persistence, wire projection, and production HTTP/subscription handlers; this does not measure provider adapter ingestion. Payloads contain no user data.`,
-    `The long turn rows read a second thread whose last user turn holds ${LONG_TURN_WORK_ROWS} rows of reasoning, commands, file changes, MCP calls, progress messages, checkpoints, and subagents. While that turn runs, web and mobile load the compact bounded snapshot and then one older page. Once it finishes, its work is deferred: the cold open is read over HTTP as web does and over the socket alone as mobile does, then the first page of the deferred work is loaded as an expanded work group does.`,
-    "The resume rows open a new socket from a cursor the client already holds: the first thread after one more ordinary turn, the long-turn thread with nothing new, and the shell from a cursor too old to replay. A client that holds shell rows first names their cursor to the HTTP shell route: the resume check row is the answer that keeps the rows, and the stale shell reload row is the snapshot that replaces them.",
-    `The fleet shell rows read the cold-connect shell after ${SHELL_SETTLED_THREADS} settled threads and ${SHELL_IDLE_SUBAGENTS} idle subagent children are added, then subscribe from that snapshot's cursor and name its project identities, so the project's repository identity is not sent again. Budgeted reads send the opt-ins current clients send; "older client" rows show the same read without the opt-ins added since row budgets.`,
-    `The stale todo list rows open a third thread the same way: ${STALE_TODO_SETTLED_RUNS} finished runs, then one run still at work with ${STALE_TODO_LIVE_ROWS} rows. Every run left its todo list open and has ${STALE_TODO_SUBAGENTS_PER_RUN} finished subagents, a provider turn and, once finished, a checkpoint. The record counts must not grow with the number of finished runs.`,
-    "",
-    "| Provider | Total thread wire | Budget | Result |",
-    "| --- | ---: | ---: | --- |",
-    ...runs.flatMap((run) => {
-      const budget = TRANSFER_BUDGETS[run.provider];
-      if (!budget) return [];
-      const observed = observedTransfer(run).totalWireBytes;
-      return [
-        `| ${run.provider} | ${formatBytes(observed)} | ${formatBytes(budget.totalWireBytes)} | ${observed <= budget.totalWireBytes ? "PASS" : "FAIL"} |`,
-      ];
-    }),
-    "",
-    "## Detailed measurements",
-    "",
-    "| Provider | Phase | Metric | Observed | Budget | Result |",
-    "| --- | --- | --- | ---: | ---: | --- |",
-  ];
-
-  for (const run of runs) {
-    const budget = TRANSFER_BUDGETS[run.provider];
-    if (!budget) continue;
-    lines.push(
-      row(
-        run.provider,
-        "thread snapshot",
-        "HTTP wire",
-        run.threadSnapshot.wireBytes,
-        budget.threadSnapshotWireBytes,
-      ),
-      row(
-        run.provider,
-        "measured turn",
-        "WebSocket wire",
-        run.measuredTurnWebSocket.wireBytes,
-        budget.measuredTurnWebSocketWireBytes,
-      ),
-      row(
-        run.provider,
-        "measured turn",
-        "WebSocket decoded",
-        run.measuredTurnWebSocket.decodedBytes,
-        budget.measuredTurnWebSocketDecodedBytes,
-      ),
-      row(
-        run.provider,
-        "measured turn",
-        "WebSocket messages",
-        run.measuredTurnWebSocket.messages,
-        budget.measuredTurnWebSocketMessages,
-        String,
-      ),
-      infoRow(run.provider, "shell snapshot", "HTTP wire", run.shellSnapshot.wireBytes),
-      ...webSocketRows(run.provider, "measured turn, shell", run.measuredTurnShellWebSocket),
-      ...webSocketRows(
-        run.provider,
-        "measured turn, second client",
-        run.measuredTurnSecondClientWebSocket,
-      ),
-      infoRow(run.provider, "measured turn", "server egress wire", serverEgressWireBytes(run)),
-      infoRow(
-        run.provider,
-        "measured turn",
-        "SQL statements",
-        run.measuredTurnSqlStatements,
-        String,
-      ),
-      ...webSocketRows(
-        run.provider,
-        `reconnect, thread (${run.reconnectThread.mode})`,
-        run.reconnectThread,
-      ),
-      ...webSocketRows(
-        run.provider,
-        `reconnect, shell (${run.reconnectShell.mode})`,
-        run.reconnectShell,
-      ),
-      infoRow(run.provider, "reconnect", "SQL statements", run.reconnectSqlStatements, String),
-      ...scenarioRows(run).map(({ phase, metric, unit, observed, maximum }) => {
-        const format = unit === "bytes" ? formatBytes : String;
-        return maximum === undefined
-          ? infoRow(run.provider, phase, metric, observed, format)
-          : row(run.provider, phase, metric, observed, maximum, format);
-      }),
-    );
-  }
-
-  lines.push("", "## Compression diagnostics", "");
-  for (const run of runs) {
-    lines.push(
-      `- ${run.provider}: thread snapshot ${formatBytes(run.threadSnapshot.decodedBodyBytes)} decoded to ${formatBytes(run.threadSnapshot.encodedBodyBytes)} gzip.`,
-      `- ${run.provider}: shell snapshot ${formatBytes(run.shellSnapshot.decodedBodyBytes)} decoded to ${formatBytes(run.shellSnapshot.encodedBodyBytes)} gzip.`,
-    );
-  }
-
-  return `${lines.join("\n")}\n`;
 }

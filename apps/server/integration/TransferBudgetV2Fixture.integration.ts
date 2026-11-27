@@ -216,7 +216,7 @@ export function turnEvents(
 }
 
 export const LONG_TURN_THREAD_ID = ThreadId.make("transfer-budget-long-turn");
-export const LONG_TURN_WORK_ROWS = 900;
+const LONG_TURN_WORK_ROWS = 900;
 
 /**
  * Three short user turns, then one agent turn far longer than a cold-open window, with the item
@@ -448,9 +448,9 @@ export function longTurnThreadBatches(
 }
 
 export const STALE_TODO_THREAD_ID = ThreadId.make("transfer-budget-stale-todo-lists");
-export const STALE_TODO_SETTLED_RUNS = 40;
+const STALE_TODO_SETTLED_RUNS = 40;
 export const STALE_TODO_SUBAGENTS_PER_RUN = 2;
-export const STALE_TODO_LIVE_ROWS = 600;
+const STALE_TODO_LIVE_ROWS = 600;
 const STALE_TODO_HANDOFF_HISTORY_BYTES = 256 * 1024;
 const staleTodoCheckpointId = (index: number) =>
   CheckpointId.make(`checkpoint:thread:${STALE_TODO_THREAD_ID}:ordinal:${index + 1}`);

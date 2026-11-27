@@ -362,9 +362,8 @@ jobs:
         if: inputs.cli_archive
         shell: bash
         env:
-          # The executable bundles the server again, so it needs the same stamp
-          # as release.yml's JS bundle.
-          T3CODE_TELEMETRY_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && inputs.release_channel || 'dev' }}
+          # The executable bundles the server again, so it needs the same release channel.
+          T3CODE_RELEASE_CHANNEL: ${{ github.repository == 'pingdotgg/t3code' && inputs.release_channel || 'dev' }}
         run: node apps/server/scripts/cli.ts build-exe --verbose ${{ inputs.platform == 'win' && format('--target win-{0}', inputs.arch) || '' }}
 
       - name: Import macOS signing certificate for the CLI archive

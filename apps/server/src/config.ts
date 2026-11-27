@@ -12,11 +12,10 @@ import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import { markNoCopyOnWrite } from "./noCopyOnWrite.ts";
 import type { ReleaseChannel } from "@t3tools/shared/releaseResource";
 
-// Official release workflows set this telemetry channel; other builds report dev.
-// Unlike __T3CODE_BUILD_CHANNEL__, this is not the sign-in page's latest/nightly channel.
-declare const __T3CODE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
-export const telemetryChannel: ReleaseChannel =
-  typeof __T3CODE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __T3CODE_TELEMETRY_CHANNEL__;
+// Official release workflows stamp the release channel. Source builds default to dev.
+declare const __T3CODE_RELEASE_CHANNEL__: ReleaseChannel | undefined;
+export const releaseChannel: ReleaseChannel =
+  typeof __T3CODE_RELEASE_CHANNEL__ === "undefined" ? "dev" : __T3CODE_RELEASE_CHANNEL__;
 
 export const DEFAULT_PORT = 3773;
 
