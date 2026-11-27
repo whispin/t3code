@@ -1746,6 +1746,9 @@ export const layerWsRpc = (
           observability: {
             logsDirectoryPath: config.logsDir,
             localTracingEnabled: true,
+            otlpTracesEnabled: false,
+            otlpMetricsEnabled: false,
+            otlpLogsEnabled: false,
           },
           settings,
           ...(serverSettings.managedPolicy === undefined

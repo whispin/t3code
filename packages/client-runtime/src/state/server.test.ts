@@ -501,6 +501,9 @@ describe("server state projection", () => {
         const observability = {
           logsDirectoryPath: "/synthetic/logs",
           localTracingEnabled: false,
+          otlpTracesEnabled: false,
+          otlpMetricsEnabled: false,
+          otlpLogsEnabled: false,
         };
         yield* Effect.scoped(
           Effect.gen(function* () {

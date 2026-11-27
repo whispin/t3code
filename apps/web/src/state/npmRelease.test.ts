@@ -54,6 +54,9 @@ const configFor = (environmentId: EnvironmentId | null, supported = true) =>
     observability: {
       logsDirectoryPath: "/test/logs",
       localTracingEnabled: false,
+      otlpTracesEnabled: false,
+      otlpMetricsEnabled: false,
+      otlpLogsEnabled: false,
     },
     settings: {},
   });

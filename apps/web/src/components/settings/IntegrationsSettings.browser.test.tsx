@@ -37,6 +37,9 @@ const config = Schema.decodeSync(ServerConfig)({
   observability: {
     logsDirectoryPath: "/workspace/logs",
     localTracingEnabled: false,
+    otlpTracesEnabled: false,
+    otlpMetricsEnabled: false,
+    otlpLogsEnabled: false,
   },
   settings: {},
 });
