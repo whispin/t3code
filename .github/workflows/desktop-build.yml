@@ -1,6 +1,8 @@
 name: Desktop Build
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       platform:
@@ -42,7 +44,7 @@ jobs:
         id: targets
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
+          BUILD_PLATFORM: ${{ github.event_name == 'push' && 'all' || inputs.platform }}
         with:
           script: |
             const { readFileSync } = require('node:fs');
@@ -56,7 +58,7 @@ jobs:
             if (selected.length === 0) throw new Error('Select a supported desktop platform.');
             const { version } = JSON.parse(readFileSync('apps/desktop/package.json', 'utf8'));
             core.setOutput('matrix', JSON.stringify({ include: selected }));
-            core.setOutput('version', `${version}-pr.${context.runNumber}`);
+            core.setOutput('version', `${version}-build.${context.runNumber}`);
             core.setOutput('windows', String(selected.some(({ platform }) => platform === 'win')));
 
   wsl_runtime:
