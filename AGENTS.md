@@ -191,6 +191,10 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 - `packages/client-runtime` - client code shared by web and mobile.
 - `.repos/` - vendored read-only references. Prefer their patterns over invented ones. Never edit or import from them. Sync with `vpr sync:repos` when bumping the matching dependency. If it is missing (sparse checkout), read a file with `git show origin/main:.repos/<path>`.
 
+## Fork GitHub Actions
+
+Only `.github/workflows/desktop-build.yml` may be enabled in this fork. It builds desktop binaries from the checked-out commit and uploads them as workflow artifacts. Keep every other workflow disabled, including after pulling or merging upstream changes; GitHub's disabled state is repository-side and is not recorded in workflow files. After syncing workflows, check `gh workflow list --all` and run `gh workflow disable <workflow-id> -R whispin/t3code` for any active workflow other than `Desktop Build`. Do not enable another workflow without explicit maintainer approval.
+
 ## Taste
 
 - Complexity belongs at the adapter boundary. Orchestration stays pure, UI stays dumb.
