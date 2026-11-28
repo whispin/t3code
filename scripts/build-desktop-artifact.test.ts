@@ -1418,6 +1418,50 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("does not count the server bytecode cache against the file-count budget", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const fixture = yield* makeWindowsPayloadFixture({ copyUnpackedNatives: true });
+        const input = {
+          stageDistDir: fixture.stageDistDir,
+          appExecutableName: fixture.appExecutableName,
+          targetArch: "x64" as const,
+          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+        };
+        const baseline = yield* validateWindowsPackagedPayload({ ...input, fileLimit: 0 }).pipe(
+          Effect.flip,
+        );
+        assert.instanceOf(baseline, WindowsPackagedPayloadValidationError);
+        const baselineCount = baseline.fileCount ?? 0;
+
+        const cacheDir = path.join(fixture.packagedAppDir, "resources", "server-compile-cache");
+        yield* fs.makeDirectory(cacheDir, { recursive: true });
+        for (let index = 0; index < 50; index += 1) {
+          yield* fs.writeFileString(path.join(cacheDir, `chunk-${String(index)}`), "bytecode");
+        }
+
+        const result = yield* validateWindowsPackagedPayload({
+          ...input,
+          fileLimit: baselineCount,
+        });
+        assert.equal(result.fileCount, baselineCount);
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(
+            ChildProcessSpawner.ChildProcessSpawner,
+            ChildProcessSpawner.make(() => Effect.succeed(mockProcess(0))),
+          ),
+          Layer.succeed(HostProcess.Platform, "win32"),
+          Layer.succeed(HostProcess.Architecture, "x64"),
+        ),
+      ),
+    ),
+  );
+
   it.effect("rejects a sidecar whose extracted server bundle cannot resolve", () =>
     Effect.scoped(
       Effect.gen(function* () {

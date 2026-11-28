@@ -3244,7 +3244,11 @@ function collectUnpackedAsarFiles(
   return output;
 }
 
-const countPayloadFiles = Effect.fn("desktopArtifact.countPayloadFiles")(function* (root: string) {
+// The bytecode cache holds one file per server chunk, so its size tracks bundle splitting, not loose dependencies.
+const countPayloadFiles = Effect.fn("desktopArtifact.countPayloadFiles")(function* (
+  root: string,
+  ignoredDirectories: ReadonlySet<string>,
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const pendingDirectories = [root];
@@ -3258,7 +3262,7 @@ const countPayloadFiles = Effect.fn("desktopArtifact.countPayloadFiles")(functio
       const entryPath = path.join(directory, entry);
       const stat = yield* fs.stat(entryPath);
       if (stat.type === "Directory") {
-        pendingDirectories.push(entryPath);
+        if (!ignoredDirectories.has(entryPath)) pendingDirectories.push(entryPath);
       } else if (stat.type === "File") {
         count += 1;
       }
@@ -3575,7 +3579,10 @@ export const validateWindowsPackagedPayload = Effect.fn(
     }
   }
 
-  const fileCount = yield* countPayloadFiles(packagedAppDir);
+  const fileCount = yield* countPayloadFiles(
+    packagedAppDir,
+    new Set([path.join(packagedAppDir, "resources", "server-compile-cache")]),
+  );
   if (fileCount > fileLimit) {
     return yield* new WindowsPackagedPayloadValidationError({
       reason: "file-limit-exceeded",
