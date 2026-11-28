@@ -191,6 +191,12 @@ jobs:
           name: desktop-build-wsl-runtime
           path: wsl-runtime
 
+      - name: Select Xcode 26.3
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.3.app
+          xcodebuild -version
+
       - name: Build unsigned installer
         env:
           BUILD_PLATFORM: ${{ matrix.platform }}
