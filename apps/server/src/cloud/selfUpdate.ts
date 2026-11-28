@@ -1,5 +1,4 @@
 import {
-  DESKTOP_UPDATE_IN_PROGRESS_MARKER_FILE,
   ServerSelfUpdateError,
   type ServerSelfUpdateCapability,
   type ServerSelfUpdateInput,
@@ -8,49 +7,29 @@ import {
   type ServerSelfUpdateResult,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
-import { HttpClient } from "effect/http";
 
-import {
-  CLI_RELEASE_BASE_URL_ENV,
-  cliReleaseChannelOf,
-  crossesReleaseTrack,
-} from "@t3tools/shared/cliRelease";
+import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
-import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
-import * as DesktopUpdateMarker from "../desktopUpdate/DesktopUpdateMarker.ts";
-import { databaseMigrationHead } from "../persistence/databaseMigrationHead.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
-import { managedUpdateMirror, managedUpdateRefusal } from "../policy/managedUpdates.ts";
-import * as ProcessRunner from "../processRunner.ts";
-import {
-  ensurePinnedRuntimeInstalled,
-  isUnpublishedRelease,
-  pinnedRuntimePaths,
-  prunePinnedRuntimes,
-} from "./pinnedRuntime.ts";
+import { pinnedRuntimePaths, prunePinnedRuntimes } from "./pinnedRuntime.ts";
 import { bootServiceProgramOf, bootServiceUnitPath } from "./bootService.ts";
-import { runStagedServicePreflight } from "./servicePreflight.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
-import { decodeServiceUnit, isExactServiceVersion } from "./serviceProtocol.ts";
+import { decodeServiceUnit } from "./serviceProtocol.ts";
 
-export function resolveServerSelfUpdateCapability(input: {
+export function resolveServerSelfUpdateCapability(_input: {
   readonly desktopManaged: boolean;
   readonly launcherManaged: boolean;
 }): ServerSelfUpdateCapability | null {
-  if (input.desktopManaged) return "desktop-managed" as const;
-  return input.launcherManaged ? ("boot-service" as const) : null;
+  return null;
 }
 
 export class ServerSelfUpdate extends Context.Service<
@@ -135,176 +114,38 @@ export function trackSwitchBlockReason(input: {
 
 export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
-  const desktopAppUpdate = yield* DesktopAppUpdate.DesktopAppUpdate;
-  const policy = yield* ManagedPolicy.ManagedPolicy;
   const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
-  const runner = yield* ProcessRunner.ProcessRunner;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const platform = yield* HostProcess.Platform;
-  const arch = yield* HostProcess.Architecture;
-  const httpClient = yield* HttpClient.HttpClient;
-  const mirror = managedUpdateMirror(policy.document);
-  const releaseBaseUrl =
-    mirror?.feedUrl ??
-    Option.getOrUndefined(yield* Config.String(CLI_RELEASE_BASE_URL_ENV).pipe(Config.option));
-  const inFlight = yield* Ref.make(false);
 
   yield* pruneRuntimesOnStart({ baseDir: serverConfig.baseDir, managed: launcher.managed }).pipe(
     Effect.forkScoped,
   );
 
-  const capability: ServerSelfUpdateCapability | null =
-    serverConfig.mode === "desktop" ? "desktop-managed" : launcher.managed ? "boot-service" : null;
   const failWith = (reason: string, cause?: unknown) =>
     cause === undefined
       ? new ServerSelfUpdateError({ reason })
       : new ServerSelfUpdateError({ reason, cause });
 
-  const crossesTrackUnsafely = (input: ServerSelfUpdateInput) =>
-    trackSwitchBlockReason({
-      serverVersion: packageJson.version,
-      targetVersion: input.targetVersion,
-      targetDatabaseMigration: input.targetDatabaseMigration,
-      databaseMigration: () => databaseMigrationHead(serverConfig.dbPath),
-    });
-
   const update: ServerSelfUpdate["Service"]["update"] = Effect.fn(
     "cloud.server_self_update.update",
-  )(function* (input, reportProgress = () => Effect.void, onHandoffAccepted = () => Effect.void) {
-    const policyRefusal = managedUpdateRefusal(
-      policy.document,
-      capability === "boot-service" ? cliReleaseChannelOf(input.targetVersion.trim()) : undefined,
-    );
-    if (policyRefusal !== undefined) {
-      return yield* failWith(policyRefusal);
-    }
-    if (capability === "desktop-managed") {
-      const unsafeCrossing = input.channel === undefined ? null : crossesTrackUnsafely(input);
-      if (unsafeCrossing !== null) return yield* failWith(unsafeCrossing);
-      if (desktopAppUpdate.available) {
-        return yield* desktopAppUpdate.run(
-          reportProgress,
-          input.channel === undefined
-            ? undefined
-            : { channel: input.channel, targetVersion: input.targetVersion },
-        );
-      }
-      return yield* failWith(
-        "This server is managed by the T3 Code desktop app on its machine; update the desktop app to update it.",
-      );
-    }
-    // The target must accept the launcher that will run it, which can be older than this server.
-    const launcherProtocol = launcher.protocol;
-    if (capability === null || launcherProtocol === undefined) {
-      return yield* failWith(
-        "Remote updates require the T3 Code background service. Run `t3 service install` on the server machine.",
-      );
-    }
-
-    const unsafeCrossing = crossesTrackUnsafely(input);
-    if (unsafeCrossing !== null) return yield* failWith(unsafeCrossing);
-    const targetVersion = input.targetVersion.trim();
-    if (!isExactServiceVersion(targetVersion)) {
-      return yield* failWith(`'${targetVersion}' is not an exact t3 version.`);
-    }
-    if (yield* Ref.getAndSet(inFlight, true)) {
-      return yield* failWith("A server update is already in progress.");
-    }
-
-    return yield* Effect.gen(function* () {
-      yield* reportProgress("downloading");
-      const paths = yield* ensurePinnedRuntimeInstalled({
-        baseDir: serverConfig.baseDir,
-        version: targetVersion,
-        fs,
-        path,
-        runner,
-        httpClient,
-        platform,
-        arch,
-        releaseBaseUrl,
-        requirePublishedRelease: mirror !== undefined,
-        validate: (runtime) =>
-          runStagedServicePreflight({
-            runner,
-            runtime,
-            targetVersion,
-            databasePath: serverConfig.dbPath,
-            launcherProtocol,
-          }),
-      }).pipe(
-        Effect.mapError((error) => {
-          if (error._tag === "PinnedRuntimePreflightBlockedError") {
-            return failWith(error.reason, error);
-          }
-          if (mirror !== undefined && isUnpublishedRelease(error)) {
-            return failWith(
-              `${mirror.organization}'s update mirror has no t3@${targetVersion} for this machine.`,
-              error,
-            );
-          }
-          const downloadFailure = [
-            error.httpStatus === undefined ? undefined : `HTTP ${error.httpStatus}`,
-            error.downloadHost === undefined ? undefined : `from ${error.downloadHost}`,
-          ]
-            .filter((part) => part !== undefined)
-            .join(" ");
-          return failWith(
-            `Could not prepare t3@${targetVersion} while ${error.step}${downloadFailure ? ` (${downloadFailure})` : ""}.`,
-            error,
-          );
-        }),
-      );
-
-      if (input.stageOnly === true) {
-        yield* Ref.set(inFlight, false);
-        return { targetVersion, method: "boot-service" as const };
-      }
-      yield* reportProgress("installing");
-      const updateId = yield* Effect.uninterruptible(
-        launcher.requestUpdate({ targetVersion, dbPath: serverConfig.dbPath }).pipe(
-          Effect.mapError((error) =>
-            failWith(
-              error._tag === "ServiceLauncherRejectedError"
-                ? error.reason
-                : "Could not ask the service launcher to activate the prepared update.",
-              error,
-            ),
-          ),
-          // The launcher stops this server next; one from before its serving lock holds nothing
-          // until the new server starts, so this marker is what an SSH launch waits on.
-          Effect.tap(() =>
-            DesktopUpdateMarker.publish(
-              path.join(serverConfig.baseDir, "runtime", DESKTOP_UPDATE_IN_PROGRESS_MARKER_FILE),
-            ).pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.ignore({ log: true })),
-          ),
-          Effect.tap(() => onHandoffAccepted()),
-        ),
-      );
-
-      yield* Effect.logInfo("Server update prepared; handing off to the service launcher.", {
-        updateId,
-        targetVersion,
-        runtimePath: paths.entryPath,
-      });
-      return { targetVersion, method: "boot-service" as const, updateId };
-    }).pipe(Effect.onError(() => Ref.set(inFlight, false)));
+  )(function* (
+    _input,
+    _reportProgress = () => Effect.void,
+    _onHandoffAccepted = () => Effect.void,
+  ) {
+    return yield* failWith("Automatic updates are disabled in this build.");
   });
 
   return ServerSelfUpdate.of({
     update,
     commitDesktopUpdate: Effect.fn("ServerSelfUpdate.commitDesktopUpdate")(
-      function (requestId, onHandoffAccepted) {
-        return desktopAppUpdate.commit(requestId, onHandoffAccepted);
+      function (_requestId, _onHandoffAccepted) {
+        return failWith("Automatic updates are disabled in this build.");
       },
     ),
   });
 });
 
-export const layer = Layer.effect(ServerSelfUpdate, make()).pipe(
-  Layer.provide(ProcessRunner.layer),
-);
+export const layer = Layer.effect(ServerSelfUpdate, make());
 
 // The update outlives client sockets; progress offers to a closed queue are ignored.
 export const updateProgressStream = (

@@ -105,9 +105,10 @@ it.effect.each([
 ])("closes recovery safely with closeMain=$closeMain", ({ visible, started, closeMain }) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const checked = yield* Deferred.make<void>();
+      let checkCount = 0;
       const remembered = yield* Deferred.make<void>();
       const shouldRecover = !visible || !started;
+      const shownRecovery = yield* Deferred.make<void>();
       const closed = Promise.withResolvers<void>();
       const loaded: string[] = [];
       const appListeners = new Map<string, (...args: readonly unknown[]) => void>();
@@ -129,6 +130,7 @@ it.effect.each([
         },
         loadURL: (url: string) => {
           loaded.push(url);
+          Deferred.doneUnsafe(shownRecovery, Effect.void);
           return Promise.resolve();
         },
         once: () => {},
@@ -171,7 +173,11 @@ it.effect.each([
                 latest: updateState({ status: "disabled" }),
                 changes: Stream.empty,
               }),
-              check: () => Deferred.succeed(checked, undefined),
+              check: () =>
+                Effect.sync(() => {
+                  checkCount++;
+                  return false;
+                }),
             } as unknown as DesktopUpdates.DesktopUpdates["Service"]),
           ),
         ),
@@ -184,7 +190,12 @@ it.effect.each([
         managedPolicy: false,
         output: "Failure details",
       });
-      yield* Deferred.await(checked);
+      if (shouldRecover) {
+        yield* Deferred.await(shownRecovery);
+      } else {
+        for (let i = 0; i < 10; i++) yield* Effect.yieldNow;
+      }
+      expect(checkCount).toBe(0);
       expect(loaded.length).toBe(shouldRecover ? 1 : 0);
       if (shouldRecover) {
         expect(decodeURIComponent(loaded[0]!)).toContain("Failure details");

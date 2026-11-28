@@ -207,7 +207,6 @@ export const listen: Effect.Effect<
   // The failure that opened the window; later restarts do not reload its details.
   const failureRef = yield* Ref.make(Option.none<BackendStartupFailure>());
   const renderedHtmlRef = yield* Ref.make("");
-  const checkedRef = yield* Ref.make(false);
   let backendHasStarted = false;
   const { latest, changes: updateChanges } = yield* updates.subscribe;
   const updateStateRef = yield* Ref.make(latest);
@@ -386,9 +385,6 @@ export const listen: Effect.Effect<
         // The backend manager already logs each failure's reason.
         yield* logWarning("primary backend failing to start");
         yield* show();
-        if (!(yield* Ref.getAndSet(checkedRef, true))) {
-          yield* updates.check("startup-recovery").pipe(Effect.forkScoped);
-        }
       }),
     ),
     Effect.catchCause((cause) =>

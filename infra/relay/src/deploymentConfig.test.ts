@@ -8,11 +8,14 @@ import {
 } from "./deploymentConfig.ts";
 
 describe("relay Worker observability", () => {
-  it("records request URLs only through the relay's own redacting spans", () => {
-    expect(RELAY_WORKER_OBSERVABILITY.logs).toEqual({
-      enabled: true,
-      invocationLogs: false,
-      headSamplingRate: 0.01,
+  it("keeps worker log export disabled", () => {
+    expect(RELAY_WORKER_OBSERVABILITY).toEqual({
+      enabled: false,
+      logs: {
+        enabled: false,
+        invocationLogs: false,
+        headSamplingRate: 0,
+      },
     });
   });
 });

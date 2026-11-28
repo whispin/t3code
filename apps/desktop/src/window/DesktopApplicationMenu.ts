@@ -4,18 +4,15 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import type { DesktopUpdateChannel } from "@t3tools/contracts";
 import * as Electron from "electron";
 import { msg } from "gt-i18n";
 
 import { makeComponentLogger } from "../app/DesktopObservability.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
-import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { applyLanguage, m, onLocaleChange } from "../i18n/messages.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
-import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 
 export class DesktopApplicationMenuActionError extends Schema.TaggedError<DesktopApplicationMenuActionError>()(
@@ -37,12 +34,7 @@ export class DesktopApplicationMenu extends Context.Service<
   }
 >()("@t3tools/desktop/window/DesktopApplicationMenu") {}
 
-type DesktopApplicationMenuRuntimeServices =
-  | DesktopUpdates.DesktopUpdates
-  | DesktopWindow.DesktopWindow
-  | ElectronDialog.ElectronDialog;
-
-const { logInfo: logUpdaterInfo } = makeComponentLogger("desktop-updater");
+type DesktopApplicationMenuRuntimeServices = DesktopWindow.DesktopWindow;
 
 const { logError: logMenuError } = makeComponentLogger("desktop-menu");
 
@@ -68,118 +60,6 @@ const runMainContentsCommand = Effect.fn("desktop.menu.runMainContentsCommand")(
   const desktopWindow = yield* DesktopWindow.DesktopWindow;
   yield* desktopWindow.runMainContentsCommand(command);
 });
-
-const trackLabel = (channel: DesktopUpdateChannel) =>
-  channel === "nightly"
-    ? m(msg("Nightly", { $context: "release track" }))
-    : m(msg("Stable", { $context: "release track" }));
-
-const checkForUpdatesFromMenu = Effect.gen(function* () {
-  const updates = yield* DesktopUpdates.DesktopUpdates;
-  const electronDialog = yield* ElectronDialog.ElectronDialog;
-  const result = yield* updates.check("menu");
-  const updateState = result.state;
-
-  if (updateState.status === "up-to-date") {
-    yield* electronDialog.showMessageBox({
-      type: "info",
-      title: m(msg("You're up to date!")),
-      message: m(msg("T3 Code {version} is currently the newest version available."), {
-        version: updateState.currentVersion,
-      }),
-      buttons: [m(msg("OK"))],
-    });
-  } else if (updateState.status === "available") {
-    const { response } = yield* electronDialog.showMessageBox({
-      type: "info",
-      title: m(msg("Update available")),
-      message:
-        updateState.availableVersion === null
-          ? m(msg("A new version of T3 Code is available."))
-          : m(msg("T3 Code {version} is available."), { version: updateState.availableVersion }),
-      detail: m(msg("You're running T3 Code {version}."), {
-        version: updateState.currentVersion,
-      }),
-      buttons: [
-        m(msg("Download", { $context: "button, downloads an app update" })),
-        m(msg("Later")),
-      ],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    if (response === 0) yield* updates.download;
-  } else if (updateState.status === "downloading") {
-    yield* electronDialog.showMessageBox({
-      type: "info",
-      title: m(msg("Update downloading")),
-      message:
-        updateState.availableVersion === null
-          ? m(msg("A new version of T3 Code is already downloading."))
-          : m(msg("T3 Code {version} is already downloading."), {
-              version: updateState.availableVersion,
-            }),
-      buttons: [m(msg("OK"))],
-    });
-  } else if (updateState.status === "downloaded") {
-    const version = updateState.downloadedVersion ?? updateState.availableVersion;
-    const { response } = yield* electronDialog.showMessageBox({
-      type: "info",
-      title: m(msg("Update ready")),
-      message:
-        version === null
-          ? m(msg("A new version of T3 Code is ready to install."))
-          : m(msg("T3 Code {version} is ready to install."), { version }),
-      detail: m(msg("T3 Code will restart to install it. Any running tasks will be interrupted.")),
-      buttons: [m(msg("Restart", { $context: "button, restarts the app" })), m(msg("Later"))],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    if (response === 0) yield* updates.install;
-  } else if (updateState.status === "error") {
-    yield* electronDialog.showMessageBox({
-      type: "warning",
-      title: m(msg("Update check failed")),
-      message: m(msg("Could not check for updates.")),
-      detail:
-        updateState.trackMismatch !== undefined
-          ? m(
-              msg(
-                "This {build} build can't update from the {saved} track on its own. Switch the update track back to {build}, or use Review beside Update track to retry the switch to {saved}.",
-              ),
-              {
-                build: trackLabel(updateState.trackMismatch.buildChannel),
-                saved: trackLabel(updateState.channel),
-              },
-            )
-          : (updateState.message ?? m(msg("An unknown error occurred. Please try again later."))),
-      buttons: [m(msg("OK"))],
-    });
-  }
-}).pipe(Effect.withSpan("desktop.menu.checkForUpdates"));
-
-const handleCheckForUpdatesMenuClick = Effect.gen(function* () {
-  const updates = yield* DesktopUpdates.DesktopUpdates;
-  const electronDialog = yield* ElectronDialog.ElectronDialog;
-  const disabledReason = yield* updates.disabledReason;
-  if (Option.isSome(disabledReason)) {
-    yield* logUpdaterInfo("manual update check requested, but updates are disabled", {
-      disabledReason: disabledReason.value,
-    });
-    yield* electronDialog.showMessageBox({
-      type: "info",
-      title: m(msg("Updates unavailable")),
-      message: m(msg("Automatic updates are not available right now.")),
-      detail: disabledReason.value,
-      buttons: [m(msg("OK"))],
-    });
-    return;
-  }
-
-  // Opening a window before backend confirmation can strand it on failed auth bootstrap.
-  const desktopWindow = yield* DesktopWindow.DesktopWindow;
-  yield* desktopWindow.activate;
-  yield* checkForUpdatesFromMenu;
-}).pipe(Effect.withSpan("desktop.menu.handleCheckForUpdatesClick"));
 
 /** @public */
 export const make = Effect.gen(function* () {
@@ -209,9 +89,6 @@ export const make = Effect.gen(function* () {
   };
 
   const configure = Effect.gen(function* () {
-    const checkForUpdatesClick = () => {
-      runMenuEffect("check-for-updates", handleCheckForUpdatesMenuClick);
-    };
     const settingsClick = () => {
       runMenuEffect("open-settings", dispatchMenuAction("open-settings"));
     };
@@ -243,10 +120,6 @@ export const make = Effect.gen(function* () {
         label: environment.displayName,
         submenu: [
           { role: "about", label: m(msg("About {appName}"), { appName: environment.displayName }) },
-          {
-            label: m(msg("Check for Updates...")),
-            click: checkForUpdatesClick,
-          },
           { type: "separator" },
           {
             label: m(msg("Settings...")),
@@ -414,16 +287,6 @@ export const make = Effect.gen(function* () {
                 { role: "front" as const, label: m(msg("Bring All to Front")) },
               ]
             : []),
-        ],
-      },
-      {
-        role: "help",
-        label: m(msg("Help", { $context: "menu bar title" })),
-        submenu: [
-          {
-            label: m(msg("Check for Updates...")),
-            click: checkForUpdatesClick,
-          },
         ],
       },
     );

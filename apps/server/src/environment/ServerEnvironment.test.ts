@@ -105,9 +105,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
         expect(descriptor.capabilities.serverInstallation).toEqual(
           mode === "web" && platform !== "win32" ? { kind: "npm-global", prefix } : undefined,
         );
-        expect(descriptor.capabilities.serverSelfUpdate).toBe(
-          mode === "web" ? undefined : "desktop-managed",
-        );
+        expect(descriptor.capabilities.serverSelfUpdate).toBeUndefined();
         expect(descriptor.capabilities).toMatchObject({
           settledWorktreeCleanup: true,
           storageCleanupRun: true,
@@ -118,12 +116,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
       }
     }),
   );
-  it.effect.each([
-    { desktopAppUpdate: false, advertised: undefined },
-    { desktopAppUpdate: true, advertised: true },
-  ])(
-    "advertises desktop app updates only when the desktop can install them ($desktopAppUpdate)",
-    ({ desktopAppUpdate, advertised }) =>
+  it.effect.each([{ desktopAppUpdate: false }, { desktopAppUpdate: true }])(
+    "keeps desktop app auto-updates disabled ($desktopAppUpdate)",
+    ({ desktopAppUpdate }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const baseDir = yield* fs.makeTempDirectoryScoped();
@@ -155,10 +150,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
           desktopAppChannelSwitch: capabilities.desktopAppChannelSwitch,
           serverSelfUpdateProgress: capabilities.serverSelfUpdateProgress,
         }).toEqual({
-          serverSelfUpdate: "desktop-managed",
-          desktopAppUpdate: advertised,
-          desktopAppChannelSwitch: advertised,
-          serverSelfUpdateProgress: advertised,
+          serverSelfUpdate: undefined,
+          desktopAppUpdate: undefined,
+          desktopAppChannelSwitch: undefined,
+          serverSelfUpdateProgress: undefined,
         });
       }),
   );

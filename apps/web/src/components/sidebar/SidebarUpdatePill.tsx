@@ -411,6 +411,14 @@ function SidebarUpdateControl() {
   };
 
   if (!isElectron && !runsEverything && !isRunningEverything) return null;
+  if (
+    (state?.enabled === false || state?.status === "disabled") &&
+    !runsEverything &&
+    !isRunningEverything &&
+    run === null
+  ) {
+    return null;
+  }
 
   const statusIcon = (
     <DesktopUpdateStatusIcon

@@ -23,7 +23,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { rpcInitialItems } from "./rpcInitialItems.ts";
 import { subscribeChatGptHandoff } from "./provider/CodexChatGptHandoff.ts";
@@ -296,7 +295,6 @@ import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import { requestUrl } from "./requestUrl.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
-const isProviderUploadFeedbackError = Schema.is(ProviderUploadFeedbackError);
 
 const resolveDiscoveryForConfig = <A, E, R>(
   discovery: Effect.Effect<A, E, R>,
@@ -1394,7 +1392,6 @@ export const layerWsRpc = (
       const eventLoopMonitor = yield* EventLoopMonitor.EventLoopMonitor;
       const threadSearch = yield* ThreadSearch.ThreadSearch;
 
-      const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
       const mcpSignIn = yield* McpSignIn.McpSignIn;
       const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
@@ -2564,53 +2561,12 @@ export const layerWsRpc = (
         [WS_METHODS.mcpAppsReadResource]: (input) => mcpAppRequests.readResource(input),
         [WS_METHODS.providerMcpSignInStart]: (input) => mcpSignIn.start(input),
         [WS_METHODS.providerMcpSignInComplete]: (input) => mcpSignIn.complete(input),
-        [WS_METHODS.providerUploadFeedback]:
-          /* Request instrumentation already owns the span; keep this helper in that context. */
-          Effect.fnUntraced(
-            function* (input) {
-              const projection = yield* threadManagement.getThreadRecords(input.threadId, [
-                "providerThreads",
-              ]);
-              const providerThread =
-                projection.providerThreads.find(
-                  (candidate) => candidate.id === projection.thread.activeProviderThreadId,
-                ) ?? projection.providerThreads.at(-1);
-              const providerSessionId = providerThread?.providerSessionId ?? null;
-              if (providerThread === undefined || providerSessionId === null) {
-                return yield* new ProviderUploadFeedbackError({
-                  threadId: input.threadId,
-                  cause: "No provider session has run in this thread yet.",
-                });
-              }
-              const runtime = Option.getOrNull(yield* providerSessionsV2.get(providerSessionId));
-              if (runtime === null) {
-                return yield* new ProviderUploadFeedbackError({
-                  threadId: input.threadId,
-                  cause: "The provider session is no longer running. Send a message first.",
-                });
-              }
-              if (runtime.uploadFeedback === undefined) {
-                return yield* new ProviderUploadFeedbackError({
-                  threadId: input.threadId,
-                  cause: `Provider '${runtime.driver}' does not support feedback uploads.`,
-                });
-              }
-              return yield* runtime.uploadFeedback({
-                providerThread,
-                ...(input.reason === undefined ? {} : { reason: input.reason }),
-              });
-            },
-            (effect, input) =>
-              effect.pipe(
-                Effect.mapError((cause) =>
-                  isProviderUploadFeedbackError(cause)
-                    ? cause
-                    : new ProviderUploadFeedbackError({
-                        threadId: input.threadId,
-                        cause,
-                      }),
-                ),
-              ),
+        [WS_METHODS.providerUploadFeedback]: (input) =>
+          Effect.fail(
+            new ProviderUploadFeedbackError({
+              threadId: input.threadId,
+              cause: "Feedback log upload is disabled in this build.",
+            }),
           ),
         [WS_METHODS.serverUpdateProvider]: (input) =>
           providerMaintenanceRunner.updateProvider(input),

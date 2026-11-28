@@ -90,9 +90,8 @@ const UPDATE_CHECK_UNAVAILABLE_ERROR_CODES = new Set([
 ]);
 let appUpdateCheckInFlight: AppUpdateCheckInFlight | undefined;
 
-/** Expo's development launcher reports updates as enabled even though its OTA APIs reject. */
-export function isAppUpdateCheckAvailable(client: Pick<AppUpdateClient, "isEnabled"> = Updates) {
-  return client.isEnabled && !(typeof __DEV__ !== "undefined" && __DEV__);
+export function isAppUpdateCheckAvailable(_client?: Pick<AppUpdateClient, "isEnabled">) {
+  return false;
 }
 
 export function registerHiddenUpdateTap(count: number): {

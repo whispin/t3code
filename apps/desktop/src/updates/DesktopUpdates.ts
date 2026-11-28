@@ -62,8 +62,6 @@ import {
 
 const CHANNEL_CHANGE_RETRY_DELAY = Duration.seconds(1);
 const CHANNEL_CHANGE_RETRIES = 30;
-const AUTO_UPDATE_STARTUP_DELAY = "15 seconds";
-const AUTO_UPDATE_POLL_INTERVAL = "4 hours";
 const UPDATE_CHECK_WAIT = Duration.seconds(90);
 
 type UpdateAction = "check" | "download" | "install" | "install-recovery" | "channel";
@@ -121,18 +119,6 @@ export class DesktopUpdateChannelPersistenceError extends Schema.TaggedError<Des
 ) {
   override get message(): string {
     return `Failed to persist the ${this.channel} desktop update channel.`;
-  }
-}
-
-export class DesktopUpdatePollerError extends Schema.TaggedError<DesktopUpdatePollerError>()(
-  "DesktopUpdatePollerError",
-  {
-    poller: Schema.Literals(["startup", "poll"]),
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return `Desktop update ${this.poller} poller failed.`;
   }
 }
 
@@ -358,19 +344,7 @@ function getAutoUpdateDisabledReason(args: {
   if (args.policy.mode === "off") {
     return args.policy.message ?? "Updates are turned off on this machine.";
   }
-  if (!args.hasUpdateFeedConfig) {
-    return "Automatic updates are not available because no update feed is configured.";
-  }
-  if (args.isDevelopment || !args.isPackaged) {
-    return "Automatic updates are only available in packaged production builds.";
-  }
-  if (args.disabledByEnv) {
-    return "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting.";
-  }
-  if (args.platform === "linux" && !args.appImage && !args.isDebPackage) {
-    return "Automatic updates on Linux require the AppImage or the .deb package.";
-  }
-  return null;
+  return "Automatic updates are disabled in this build.";
 }
 
 const trackLabel = (channel: DesktopUpdateChannel) =>
@@ -1090,40 +1064,6 @@ export const make = Effect.gen(function* () {
     };
   });
 
-  const startUpdatePollers: Effect.Effect<void, never, Scope.Scope> = Effect.gen(function* () {
-    yield* Effect.sleep(AUTO_UPDATE_STARTUP_DELAY).pipe(
-      Effect.andThen(checkForUpdates("startup")),
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterruptsOnly(cause)) {
-          return Effect.void;
-        }
-        const error = new DesktopUpdatePollerError({ poller: "startup", cause });
-        return logUpdaterError(error.message, {
-          errorTag: error._tag,
-          cause: describeUpdateErrorCause(error.cause),
-          poller: error.poller,
-        });
-      }),
-      Effect.forkScoped,
-    );
-    yield* Effect.sleep(AUTO_UPDATE_POLL_INTERVAL).pipe(
-      Effect.andThen(checkForUpdates("poll")),
-      Effect.forever,
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterruptsOnly(cause)) {
-          return Effect.void;
-        }
-        const error = new DesktopUpdatePollerError({ poller: "poll", cause });
-        return logUpdaterError(error.message, {
-          errorTag: error._tag,
-          cause: describeUpdateErrorCause(error.cause),
-          poller: error.poller,
-        });
-      }),
-      Effect.forkScoped,
-    );
-  }).pipe(Effect.withSpan("desktop.updates.startPollers"));
-
   const handleUpdateAvailable = Effect.fn("desktop.updates.handleUpdateAvailable")(function* (
     raw: unknown,
   ) {
@@ -1403,8 +1343,6 @@ export const make = Effect.gen(function* () {
       yield* electronUpdater.on("update-downloaded", (info: unknown) => {
         runEffect(handleUpdateDownloaded(info));
       });
-
-      yield* startUpdatePollers;
     }).pipe(Effect.withSpan("desktop.updates.configure")),
     setChannel: Effect.fn("desktop.updates.setChannel")(function* (
       nextChannel: DesktopUpdateChannel,

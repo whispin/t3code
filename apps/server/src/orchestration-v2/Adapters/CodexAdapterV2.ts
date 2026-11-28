@@ -9465,30 +9465,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 ),
               ),
           ),
-          uploadFeedback: Effect.fn("CodexAdapterV2.uploadFeedback")(
-            function* (feedbackInput) {
-              const threadId = yield* getNativeThreadId(feedbackInput.providerThread);
-              const response = yield* ensureInitialized.pipe(
-                Effect.andThen(
-                  client.request("feedback/upload", {
-                    classification: "bug",
-                    includeLogs: true,
-                    ...(feedbackInput.reason ? { reason: feedbackInput.reason } : {}),
-                    threadId,
-                  }),
-                ),
-              );
-              return { feedbackId: response.threadId };
-            },
-            Effect.mapError(
-              (cause) =>
-                new ProviderAdapter.ProviderAdapterProtocolError({
-                  driver: CODEX_PROVIDER,
-                  detail: "Failed to upload Codex thread feedback.",
-                  payload: cause,
-                }),
-            ),
-          ),
           mcpApps,
           mcpSignIn: {
             start: Effect.fn("CodexAdapterV2.mcpSignIn.start")(
