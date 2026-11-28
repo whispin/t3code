@@ -35,6 +35,7 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
@@ -148,7 +149,7 @@ const decodeShellResumable = Schema.decodeUnknownEffect(
 
 const layerPersistence = EventSink.layer.pipe(
   Layer.provideMerge(EventStore.layerFromOrchestrationEventStore),
-  Layer.provideMerge(ProjectionStore.layer),
+  Layer.provideMerge(ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest))),
   Layer.provideMerge(OrchestrationEventStore.layer),
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );

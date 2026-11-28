@@ -41,7 +41,6 @@ const make = Effect.gen(function* () {
   const {
     authorizeCacheWrite,
     keys,
-    cborResponse,
     cleanup,
     getScope,
     selectBlob,
@@ -154,9 +153,9 @@ const make = Effect.gen(function* () {
               }
               if (operation === "fetch") {
                 const result = yield* protocol(() =>
-                  fetchMetadata(request, bindings, "t3code", defaults, deadline, stats),
+                  fetchMetadata(request, bindings, context, "t3code", defaults, deadline, stats),
                 );
-                return cborResponse(result);
+                return result.response;
               }
               const selected = yield* protocol(() =>
                 selectBlob(bindings.INDEX, "t3code", route[2]!, stats),

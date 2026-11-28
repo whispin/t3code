@@ -70,7 +70,7 @@ export const loadedPolicy = Effect.fn("ManagedPolicy.loadedPolicy")(function* (
  */
 export function deniedBy(
   policy: Pick<ManagedPolicy["Service"], "document">,
-  capability: "webhookTasks",
+  capability: "webhookTasks" | "previewTunnel" | "worktreeLayoutCommands",
 ): string | undefined {
   return policy.document?.limits?.[capability] === false ? policy.document.organization : undefined;
 }
@@ -129,8 +129,16 @@ function summarizeLimits(
   document: ManagedPolicyDocument,
   lockedInstanceFields: Readonly<Record<string, ReadonlyArray<string>>>,
 ): LimitsSummary {
-  const { maxRuntimeMode, clients, webhookTasks, browserCookieImport, providers, updates } =
-    document.limits ?? {};
+  const {
+    maxRuntimeMode,
+    clients,
+    webhookTasks,
+    browserCookieImport,
+    previewTunnel,
+    worktreeLayoutCommands,
+    providers,
+    updates,
+  } = document.limits ?? {};
   const connect = ManagedLimits.allowsConnect({ document });
   return {
     ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
@@ -138,6 +146,8 @@ function summarizeLimits(
     ...(connect ? {} : { connect: false }),
     ...(webhookTasks === undefined ? {} : { webhookTasks }),
     ...(browserCookieImport === undefined ? {} : { browserCookieImport }),
+    ...(previewTunnel === undefined ? {} : { previewTunnel }),
+    ...(worktreeLayoutCommands === undefined ? {} : { worktreeLayoutCommands }),
     ...(providers?.allowedDrivers === undefined && Object.keys(lockedInstanceFields).length === 0
       ? {}
       : {

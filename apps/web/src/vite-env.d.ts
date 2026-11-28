@@ -12,7 +12,6 @@ interface ImportMetaEnv {
   readonly VITE_CLERK_JWT_TEMPLATE: string;
   readonly VITE_CLERK_CLI_OAUTH_CLIENT_ID: string;
   readonly T3CODE_DESKTOP_UPDATE_REPOSITORY: string;
-  readonly T3CODE_FEATURE_SECRETS: string;
   readonly APP_VERSION: string;
 }
 
